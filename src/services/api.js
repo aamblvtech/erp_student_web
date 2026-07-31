@@ -103,6 +103,73 @@ export const api = {
     }
   },
 
+  getTimetable: async () => {
+    try {
+      const res = await apiRequest("/timetable").catch(() => apiRequest("/data/timetable"));
+      return Array.isArray(res) ? res : res?.rows || [];
+    } catch (err) {
+      console.warn("Backend getTimetable error:", err);
+      return [];
+    }
+  },
+
+  getLibraryBooks: async () => {
+    try {
+      const res = await apiRequest("/library").catch(() => apiRequest("/data/library"));
+      return res;
+    } catch (err) {
+      console.warn("Backend getLibraryBooks error:", err);
+      return null;
+    }
+  },
+
+  getTransportData: async () => {
+    try {
+      const res = await apiRequest("/transport").catch(() => apiRequest("/data/transport"));
+      return res;
+    } catch (err) {
+      console.warn("Backend getTransportData error:", err);
+      return null;
+    }
+  },
+
+  getStudentLeaves: async (studentId) => {
+    try {
+      const stored = getStoredStudent();
+      const id = studentId || stored?.id || "me";
+      const res = await apiRequest(`/leaves/student/${id}`).catch(() => apiRequest("/leaves"));
+      return Array.isArray(res) ? res : res?.leaves || [];
+    } catch (err) {
+      console.warn("Backend getStudentLeaves error:", err);
+      return [];
+    }
+  },
+
+  applyStudentLeave: async (payload) => {
+    const stored = getStoredStudent();
+    const body = {
+      ...payload,
+      student_id: stored?.id || 8,
+      student_name: stored?.name || stored?.full_name || "raj",
+      roll_no: stored?.roll_no || "STU-108",
+      grade_class: stored?.grade_class || "Semester 6"
+    };
+    return await apiRequest("/leaves", {
+      method: "POST",
+      body: JSON.stringify(body)
+    });
+  },
+
+  getHolidays: async () => {
+    try {
+      const res = await apiRequest("/holidays").catch(() => apiRequest("/data/holidays"));
+      return Array.isArray(res) ? res : [];
+    } catch (err) {
+      console.warn("Backend getHolidays error:", err);
+      return [];
+    }
+  },
+
   getStudentFees: async (studentId) => {
     try {
       const stored = getStoredStudent();

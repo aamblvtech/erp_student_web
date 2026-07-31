@@ -196,6 +196,8 @@ const NAV = [
   { key: "holidays", label: "Holidays", icon: "calendar-clear" },
   { key: "timetable", label: "Time Table", icon: "time" },
   { key: "billing", label: "Billing", icon: "receipt" },
+  { key: "library", label: "Library Catalog", icon: "book" },
+  { key: "transport", label: "Transport Pass", icon: "bus" },
   { key: "leave", label: "Leave", icon: "briefcase" },
   { key: "enrollment", label: "Enrollment", icon: "person-add" },
   { key: "finalResult", label: "Result", icon: "bar-chart" },
@@ -210,7 +212,7 @@ const routeLabels = {
   announcements: "Announcements",
   attendance: "Attendance Overview",
   attendanceLog: "Attendance Log",
-  attendanceMonthly: "Monthly Attendance",
+  attendanceSubject: "Subject-Wise Attendance",
   attendanceOverall: "Overall Attendance",
   assignments: "Assignments",
   examSchedule: "Exam Schedule",
@@ -333,7 +335,7 @@ export default function App() {
 
           <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
             {NAV.map((item) => {
-              const active = route === item.key || (item.key === "attendance" && ["attendanceLog", "attendanceMonthly", "attendanceOverall"].includes(route)) || (item.key === "examSchedule" && route === "examTable") || (item.key === "timetable" && route === "timetablePoster") || (item.key === "enrollment" && route === "completedCourses");
+              const active = route === item.key || (item.key === "attendance" && ["attendanceLog", "attendanceSubject", "attendanceOverall"].includes(route)) || (item.key === "examSchedule" && route === "examTable") || (item.key === "timetable" && route === "timetablePoster") || (item.key === "enrollment" && route === "completedCourses");
               return (
                 <button
                   key={item.key}
@@ -391,7 +393,7 @@ export default function App() {
 
               <nav className="flex-1 space-y-1 overflow-y-auto">
                 {NAV.map((item) => {
-                  const active = route === item.key || (item.key === "attendance" && ["attendanceLog", "attendanceMonthly", "attendanceOverall"].includes(route)) || (item.key === "examSchedule" && route === "examTable") || (item.key === "timetable" && route === "timetablePoster") || (item.key === "enrollment" && route === "completedCourses");
+                  const active = route === item.key || (item.key === "attendance" && ["attendanceLog", "attendanceSubject", "attendanceOverall"].includes(route)) || (item.key === "examSchedule" && route === "examTable") || (item.key === "timetable" && route === "timetablePoster") || (item.key === "enrollment" && route === "completedCourses");
                   return (
                     <button
                       key={item.key}
@@ -496,16 +498,16 @@ export default function App() {
       pageContent = <Announcements />;
       break;
     case "attendance":
-      pageContent = <Attendance student={student} parentRoute="attendance" navigateTo={navigateTo} />;
+      pageContent = <Attendance student={student} parentRoute="attendanceOverall" navigateTo={navigateTo} />;
+      break;
+    case "attendanceOverall":
+      pageContent = <Attendance student={student} parentRoute="attendanceOverall" navigateTo={navigateTo} />;
       break;
     case "attendanceLog":
       pageContent = <Attendance student={student} parentRoute="attendanceLog" navigateTo={navigateTo} />;
       break;
-    case "attendanceMonthly":
-      pageContent = <Attendance student={student} parentRoute="attendanceMonthly" navigateTo={navigateTo} />;
-      break;
-    case "attendanceOverall":
-      pageContent = <Attendance student={student} parentRoute="attendanceOverall" navigateTo={navigateTo} />;
+    case "attendanceSubject":
+      pageContent = <Attendance student={student} parentRoute="attendanceSubject" navigateTo={navigateTo} />;
       break;
     case "assignments":
       pageContent = (
@@ -536,6 +538,12 @@ export default function App() {
       break;
     case "billing":
       pageContent = <Billing />;
+      break;
+    case "library":
+      pageContent = <StudentLibrary />;
+      break;
+    case "transport":
+      pageContent = <StudentTransport />;
       break;
     case "leave":
       pageContent = (
@@ -1261,10 +1269,9 @@ function Announcements() {
 // ----------------------------------------------------
 function Attendance({ student, parentRoute, navigateTo }) {
   const tabs = [
-    { key: "attendance", label: "Subject-Wise" },
-    { key: "attendanceLog", label: "Daily Logs" },
-    { key: "attendanceMonthly", label: "Monthly Summary" },
     { key: "attendanceOverall", label: "Overall Rating" },
+    { key: "attendanceLog", label: "Daily Logs" },
+    { key: "attendanceSubject", label: "Subject-Wise" },
   ];
 
   const [liveData, setLiveData] = useState(null);
@@ -1323,12 +1330,6 @@ function Attendance({ student, parentRoute, navigateTo }) {
         { date: "Live Register", status: percentage >= 75 ? "Present" : "Absent", details: `Overall Database Attendance: ${percentage}%` },
       ];
 
-  const presentDays = liveData?.records
-    ? liveData.records.filter((r) => r.status === "Present" || r.status === "Late").length
-    : Math.round((percentage * 26) / 100);
-  const totalDays = liveData?.records?.length || 26;
-  const absentDays = Math.max(0, totalDays - presentDays);
-
   const subjectsList = liveData?.subjectWise?.length
     ? liveData.subjectWise.map((sub) => ({
         name: sub.subject,
@@ -1342,7 +1343,7 @@ function Attendance({ student, parentRoute, navigateTo }) {
       ];
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-6">
+    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-6 text-left">
       {/* Tabs Header */}
       <div className="flex justify-between items-center border-b border-slate-200 p-0.5 overflow-x-auto gap-2">
         <div className="flex gap-2">
@@ -1350,8 +1351,8 @@ function Attendance({ student, parentRoute, navigateTo }) {
             <button
               key={tab.key}
               onClick={() => navigateTo(tab.key)}
-              className={`whitespace-nowrap px-4 py-2 text-xs font-black rounded-t-lg transition-all border-b-2 ${
-                parentRoute === tab.key
+              className={`whitespace-nowrap px-4 py-2 text-xs font-black rounded-t-lg transition-all border-b-2 cursor-pointer ${
+                parentRoute === tab.key || (tab.key === "attendanceOverall" && parentRoute === "attendance")
                   ? "border-blue-600 text-blue-600"
                   : "border-transparent text-slate-400 hover:text-slate-700"
               }`}
@@ -1368,113 +1369,8 @@ function Attendance({ student, parentRoute, navigateTo }) {
 
       {loading && <div className="p-8 text-center text-xs text-slate-400">Loading attendance metrics from database...</div>}
 
-      {/* Render tab content */}
-      {!loading && parentRoute === "attendance" && (
-        <div className="space-y-4">
-          <h3 className="text-sm font-black text-slate-900 leading-tight">Subject-wise Class Attendance</h3>
-          <div className="space-y-4 border border-slate-100 p-4 rounded-xl">
-            {subjectsList.map((sub) => (
-              <div key={sub.name} className="space-y-2">
-                <div className="flex justify-between items-center text-xs font-bold text-slate-700">
-                  <span>{sub.name}</span>
-                  <span>{sub.value}% Attendance</span>
-                </div>
-                <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${sub.color}`}
-                    style={{ width: `${sub.value}%` }}
-                  ></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {!loading && parentRoute === "attendanceLog" && (
-        <div className="space-y-4">
-          <h3 className="text-sm font-black text-slate-900 leading-tight">Recent Daily Registers</h3>
-          <div className="overflow-x-auto border border-slate-100 rounded-xl">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold">
-                  <th className="p-4">Date</th>
-                  <th className="p-4">Status</th>
-                  <th className="p-4">Details</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                {logs.map((log, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="p-4 font-bold text-slate-900">{log.date}</td>
-                    <td className="p-4">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
-                          log.status === "Present"
-                            ? "bg-emerald-100 text-emerald-800"
-                            : log.status === "Late"
-                            ? "bg-amber-100 text-amber-800"
-                            : "bg-rose-100 text-rose-800"
-                        }`}
-                      >
-                        {log.status}
-                      </span>
-                    </td>
-                    <td className="p-4 text-slate-400 font-medium">{log.details}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {!loading && parentRoute === "attendanceMonthly" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-          <div className="flex justify-center p-4">
-            <div className="relative w-44 h-44 flex items-center justify-center">
-              <svg className="w-full h-full transform -rotate-90">
-                <circle cx="88" cy="88" r="70" stroke="#f1f5f9" strokeWidth="16" fill="transparent" />
-                <circle
-                  cx="88"
-                  cy="88"
-                  r="70"
-                  stroke={percentage >= 75 ? "#10b981" : "#f43f5e"}
-                  strokeWidth="16"
-                  fill="transparent"
-                  strokeDasharray={440}
-                  strokeDashoffset={440 - (440 * Math.min(100, Math.max(0, percentage))) / 100}
-                  strokeLinecap="round"
-                  className="transition-all duration-500"
-                />
-              </svg>
-              <div className="absolute text-center">
-                <span className="text-3xl font-black text-slate-900">{percentage}%</span>
-                <span className="text-[10px] text-slate-400 font-bold block uppercase mt-0.5 tracking-wider">Present</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <h3 className="text-sm font-black text-slate-900 leading-tight">Monthly Summary Metrics</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-xl">
-                <span className="text-slate-400 text-xs font-bold block">Days Present</span>
-                <span className="text-2xl font-black text-emerald-700 block mt-1">{presentDays} Days</span>
-              </div>
-              <div className="p-4 bg-rose-50/50 border border-rose-100 rounded-xl">
-                <span className="text-slate-400 text-xs font-bold block">Days Absent</span>
-                <span className="text-2xl font-black text-rose-700 block mt-1">{absentDays} Days</span>
-              </div>
-            </div>
-            <p className="text-slate-400 text-xs leading-relaxed font-semibold">
-              Your class attendance percentage is calculated from PostgreSQL registers. Maintain above 75% to avoid academic eligibility warnings.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {!loading && parentRoute === "attendanceOverall" && (
+      {/* Render 1: Overall Rating */}
+      {!loading && (parentRoute === "attendanceOverall" || parentRoute === "attendance") && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
           <div className="flex justify-center p-4">
             <div className="relative w-44 h-44 flex items-center justify-center">
@@ -1518,6 +1414,68 @@ function Attendance({ student, parentRoute, navigateTo }) {
                 <span className="text-slate-800">{percentage >= 75 ? "Satisfied" : "Action Needed"}</span>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Render 2: Daily Logs */}
+      {!loading && parentRoute === "attendanceLog" && (
+        <div className="space-y-4">
+          <h3 className="text-sm font-black text-slate-900 leading-tight">Recent Daily Registers</h3>
+          <div className="overflow-x-auto border border-slate-100 rounded-xl">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold">
+                  <th className="p-4">Date</th>
+                  <th className="p-4">Status</th>
+                  <th className="p-4">Details</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                {logs.map((log, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="p-4 font-bold text-slate-900">{log.date}</td>
+                    <td className="p-4">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                          log.status === "Present"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : log.status === "Late"
+                            ? "bg-amber-100 text-amber-800"
+                            : "bg-rose-100 text-rose-800"
+                        }`}
+                      >
+                        {log.status}
+                      </span>
+                    </td>
+                    <td className="p-4 text-slate-400 font-medium">{log.details}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Render 3: Subject-Wise */}
+      {!loading && parentRoute === "attendanceSubject" && (
+        <div className="space-y-4">
+          <h3 className="text-sm font-black text-slate-900 leading-tight">Subject-wise Class Attendance</h3>
+          <div className="space-y-4 border border-slate-100 p-4 rounded-xl">
+            {subjectsList.map((sub) => (
+              <div key={sub.name} className="space-y-2">
+                <div className="flex justify-between items-center text-xs font-bold text-slate-700">
+                  <span>{sub.name}</span>
+                  <span>{sub.value}% Attendance</span>
+                </div>
+                <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${sub.color}`}
+                    style={{ width: `${sub.value}%` }}
+                  ></div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -1953,33 +1911,92 @@ function ExamSchedule({ navigateTo, page }) {
 // 10. Holidays Screen
 // ----------------------------------------------------
 function Holidays() {
+  const [liveHolidays, setLiveHolidays] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadHolidaysData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.getHolidays();
+      setLiveHolidays(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.warn("Could not load live holidays:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadHolidaysData();
+  }, [loadHolidaysData]);
+
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-6">
-      <div className="border-b border-slate-100 pb-3 flex justify-between items-center">
-        <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
-          <Icon name="calendar-clear" className="w-5 h-5 text-blue-600" />
-          <span>Upcoming Gazetted Holidays</span>
-        </h3>
+    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-6 text-left">
+      <div className="border-b border-slate-100 pb-3 flex justify-between items-center flex-wrap gap-2">
+        <div>
+          <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+            <Icon name="calendar-clear" className="w-5 h-5 text-blue-600" />
+            <span>Official Institution Holidays</span>
+          </h3>
+          <p className="text-xs text-slate-400 font-semibold mt-0.5">
+            Official academic and festival holidays published by campus administration.
+          </p>
+        </div>
+        <button
+          onClick={loadHolidaysData}
+          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg transition-all cursor-pointer"
+        >
+          🔄 Refresh
+        </button>
       </div>
 
-      <div className="overflow-x-auto border border-slate-100 rounded-xl">
-        <table className="w-full text-left border-collapse text-xs">
-          <thead>
-            <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold">
-              <th className="p-4">Holiday / Event</th>
-              <th className="p-4 text-right">Scheduled Date</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-            {holidays.map((h, idx) => (
-              <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                <td className="p-4 font-bold text-slate-900">{h.event}</td>
-                <td className="p-4 text-slate-400 text-right font-black">{h.date}</td>
+      {loading ? (
+        <div className="p-8 text-center text-xs font-bold text-slate-400">
+          🔄 Loading live holidays calendar from database...
+        </div>
+      ) : (
+        <div className="overflow-x-auto border border-slate-100 rounded-xl">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold">
+                <th className="p-4">Holiday Title</th>
+                <th className="p-4">Category</th>
+                <th className="p-4">Details / Description</th>
+                <th className="p-4 text-right">Scheduled Date</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+              {liveHolidays.map((h) => {
+                const dateObj = new Date(h.date);
+                const dateStr = !isNaN(dateObj.getTime())
+                  ? dateObj.toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short", year: "numeric" })
+                  : h.date;
+
+                return (
+                  <tr key={h.id || h.title} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="p-4 font-black text-slate-900">🎉 {h.title}</td>
+                    <td className="p-4">
+                      <span className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-md text-[10px] font-black uppercase">
+                        {h.type || "National"}
+                      </span>
+                    </td>
+                    <td className="p-4 text-slate-500 font-medium">{h.description || "Official campus holiday."}</td>
+                    <td className="p-4 text-blue-600 text-right font-mono font-bold">{dateStr}</td>
+                  </tr>
+                );
+              })}
+
+              {liveHolidays.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="p-8 text-center text-slate-400 font-bold">
+                    No holidays currently scheduled.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -1988,13 +2005,53 @@ function Holidays() {
 // 11. Timetable Screen (Matrix and Poster Views)
 // ----------------------------------------------------
 function Timetable({ navigateTo, page }) {
+  const [timetableSlots, setTimetableSlots] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadTT() {
+      setLoading(true);
+      try {
+        const data = await api.getTimetable();
+        setTimetableSlots(data);
+      } catch (err) {
+        console.warn("Error fetching student timetable:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadTT();
+  }, []);
+
+  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+  const slots = [
+    "09:00 AM - 10:00 AM",
+    "10:15 AM - 11:15 AM",
+    "11:30 AM - 12:30 PM",
+    "01:30 PM - 02:30 PM",
+    "02:45 PM - 03:45 PM"
+  ];
+
+  const getSlotForDay = (timeSlot, dayName) => {
+    return timetableSlots.find((s) => {
+      const matchDay = (s.day_of_week || s.day || "").toLowerCase() === dayName.toLowerCase();
+      const matchSlot = (s.time_slot || s.slot || "").toLowerCase() === timeSlot.toLowerCase();
+      return matchDay && matchSlot;
+    });
+  };
+
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-6">
+    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-6 text-left">
       <div className="border-b border-slate-100 pb-3 flex justify-between items-center flex-wrap gap-4">
-        <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
-          <Icon name="time" className="w-5 h-5 text-blue-600" />
-          <span>Weekly Class Timetable Matrix</span>
-        </h3>
+        <div>
+          <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+            <Icon name="time" className="w-5 h-5 text-blue-600" />
+            <span>Weekly Academic Timetable</span>
+          </h3>
+          <p className="text-xs text-slate-400 font-semibold mt-0.5">
+            Live course schedule, assigned classrooms, and faculty timetable.
+          </p>
+        </div>
 
         <div className="flex bg-slate-100 p-1 border border-slate-200 rounded-lg text-xs font-bold">
           <button
@@ -2016,28 +2073,49 @@ function Timetable({ navigateTo, page }) {
         </div>
       </div>
 
-      {page === "matrix" ? (
+      {loading ? (
+        <div className="p-8 text-center text-xs font-bold text-slate-400">
+          🔄 Loading live PostgreSQL academic timetable...
+        </div>
+      ) : page === "matrix" ? (
         <div className="overflow-x-auto border border-slate-100 rounded-xl">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold">
-                <th className="p-4">Time Slot</th>
-                <th className="p-4">Monday</th>
-                <th className="p-4">Tuesday</th>
-                <th className="p-4">Wednesday</th>
-                <th className="p-4">Thursday</th>
-                <th className="p-4">Friday</th>
+                <th className="p-4 w-36">Time Slot</th>
+                {days.map((day) => (
+                  <th key={day} className="p-4">{day}</th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-              {timetableData.map((row, idx) => (
-                <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="p-4 font-bold text-blue-600">{row.time}</td>
-                  <td className="p-4 text-slate-800">{row.mon}</td>
-                  <td className="p-4 text-slate-800">{row.tue}</td>
-                  <td className="p-4 text-slate-800">{row.wed}</td>
-                  <td className="p-4 text-slate-800">{row.thu}</td>
-                  <td className="p-4 text-slate-800">{row.fri}</td>
+              {slots.map((slotTime) => (
+                <tr key={slotTime} className="hover:bg-slate-50/50 transition-colors">
+                  <td className="p-4 font-bold text-blue-600 font-mono text-[11px] bg-slate-50/50">
+                    {slotTime}
+                  </td>
+                  {days.map((day) => {
+                    const match = getSlotForDay(slotTime, day);
+                    return (
+                      <td key={day} className="p-3 align-top">
+                        {match ? (
+                          <div className="p-2.5 bg-blue-50/80 border border-blue-100 rounded-xl text-xs space-y-1">
+                            <div className="font-black text-slate-900 leading-tight">
+                              {match.subject}
+                            </div>
+                            <div className="text-[10px] text-blue-700 font-bold">
+                              👤 {match.faculty}
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-semibold">
+                              🏫 {match.classroom}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-slate-300 font-normal italic">-</span>
+                        )}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>
@@ -2046,34 +2124,34 @@ function Timetable({ navigateTo, page }) {
       ) : (
         <div className="p-6 bg-slate-900 border border-slate-800 text-white rounded-xl space-y-4">
           <div>
-            <h4 className="text-lg font-black tracking-tight">Weekly Academic Schedule poster</h4>
-            <p className="text-slate-400 text-xs font-semibold mt-1">Class Section: CSE-6A | Springfield Campus</p>
+            <h4 className="text-lg font-black tracking-tight">Weekly Academic Schedule Poster</h4>
+            <p className="text-slate-400 text-xs font-semibold mt-1">Class Section: Semester 6-A | Springfield Campus</p>
           </div>
-          <div className="overflow-x-auto border border-slate-800 rounded-xl">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-slate-950 text-slate-300 border-b border-slate-800 font-black">
-                  <th className="p-3">Slot</th>
-                  <th className="p-3">Mon</th>
-                  <th className="p-3">Tue</th>
-                  <th className="p-3">Wed</th>
-                  <th className="p-3">Thu</th>
-                  <th className="p-3">Fri</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800 text-slate-400 font-semibold">
-                {timetableData.slice(0, 4).map((row, idx) => (
-                  <tr key={idx}>
-                    <td className="p-3 font-bold text-blue-400">{row.time}</td>
-                    <td className="p-3">{row.mon.slice(0, 10)}...</td>
-                    <td className="p-3">{row.tue.slice(0, 10)}...</td>
-                    <td className="p-3">{row.wed.slice(0, 10)}...</td>
-                    <td className="p-3">{row.thu.slice(0, 10)}...</td>
-                    <td className="p-3">{row.fri.slice(0, 10)}...</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+            {timetableSlots.map((item) => (
+              <div key={item.id} className="bg-slate-800/90 border border-slate-700 p-4 rounded-xl space-y-2 text-left">
+                <div className="flex justify-between items-start">
+                  <span className="px-2 py-0.5 bg-blue-600/30 border border-blue-500/30 text-blue-300 font-black rounded text-[10px] uppercase">
+                    {item.day_of_week || item.day}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {item.time_slot || item.slot}
+                  </span>
+                </div>
+                <h5 className="font-black text-sm text-white">{item.subject}</h5>
+                <div className="text-xs text-slate-300 font-semibold">
+                  👤 Faculty: <span className="text-amber-400 font-bold">{item.faculty}</span>
+                </div>
+                <div className="text-xs text-slate-400">
+                  🏫 Room: {item.classroom}
+                </div>
+              </div>
+            ))}
+            {timetableSlots.length === 0 && (
+              <div className="col-span-full p-8 text-center text-slate-500 font-bold text-xs">
+                No active timetable slots published in database.
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2537,41 +2615,67 @@ function Billing() {
 // ----------------------------------------------------
 // 13. Leave Application Screen (Stateful)
 // ----------------------------------------------------
-function Leave({ leaves, onSubmit }) {
+function Leave() {
+  const [leaveHistory, setLeaveHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [type, setType] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [reason, setReason] = useState("");
   const [notif, setNotif] = useState("");
 
-  const handleApply = (e) => {
+  const loadHistory = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.getStudentLeaves();
+      setLeaveHistory(res || []);
+    } catch (err) {
+      console.warn("Error fetching leave history:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
+  const handleApply = async (e) => {
     e.preventDefault();
     if (!type || !from || !to || !reason) {
-      alert("Please fill in leave details.");
+      alert("Please fill in all required leave details.");
       return;
     }
 
-    const payload = {
-      id: Date.now(),
-      type,
-      fromDate: from,
-      toDate: to,
-      reason,
-      status: "Waiting Review",
-    };
+    setSubmitting(true);
+    try {
+      const payload = {
+        type,
+        fromDate: from,
+        toDate: to,
+        reason
+      };
 
-    onSubmit(payload);
-    setNotif("Leave request submitted successfully!");
+      await api.applyStudentLeave(payload);
+      setNotif("Leave request submitted successfully to PostgreSQL!");
 
-    // Clear form
-    setType("");
-    setFrom("");
-    setTo("");
-    setReason("");
+      // Clear form
+      setType("");
+      setFrom("");
+      setTo("");
+      setReason("");
 
-    setTimeout(() => {
-      setNotif("");
-    }, 3000);
+      await loadHistory();
+
+      setTimeout(() => {
+        setNotif("");
+      }, 4000);
+    } catch (err) {
+      alert("Failed to submit leave request: " + (err.message || "Something went wrong"));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -2593,11 +2697,12 @@ function Leave({ leaves, onSubmit }) {
           <form onSubmit={handleApply} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-slate-400 text-xs font-bold block mb-1.5">Leave Type</label>
+                <label className="text-slate-400 text-xs font-bold block mb-1.5">Leave Type *</label>
                 <select
+                  required
                   value={type}
                   onChange={(e) => setType(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl text-slate-800 outline-hidden transition-all text-xs"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl text-slate-800 outline-hidden transition-all text-xs font-bold"
                 >
                   <option value="">Select leave category</option>
                   <option value="Sick Leave">Sick Leave</option>
@@ -2608,42 +2713,46 @@ function Leave({ leaves, onSubmit }) {
               </div>
 
               <div>
-                <label className="text-slate-400 text-xs font-bold block mb-1.5">From Date</label>
+                <label className="text-slate-400 text-xs font-bold block mb-1.5">From Date *</label>
                 <input
                   type="date"
+                  required
                   value={from}
                   onChange={(e) => setFrom(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl text-slate-800 outline-hidden transition-all text-xs"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl text-slate-800 outline-hidden transition-all text-xs font-mono font-bold"
                 />
               </div>
 
               <div>
-                <label className="text-slate-400 text-xs font-bold block mb-1.5">To Date</label>
+                <label className="text-slate-400 text-xs font-bold block mb-1.5">To Date *</label>
                 <input
                   type="date"
+                  required
                   value={to}
                   onChange={(e) => setTo(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl text-slate-800 outline-hidden transition-all text-xs"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl text-slate-800 outline-hidden transition-all text-xs font-mono font-bold"
                 />
               </div>
             </div>
 
             <div>
-              <label className="text-slate-400 text-xs font-bold block mb-1.5">Reason for Absence</label>
+              <label className="text-slate-400 text-xs font-bold block mb-1.5">Reason for Absence *</label>
               <textarea
                 rows="4"
+                required
                 placeholder="Brief description of the reason for leave..."
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                className="w-full p-4 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl text-slate-800 placeholder-slate-400 outline-hidden transition-all text-xs"
+                className="w-full p-4 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl text-slate-800 placeholder-slate-400 outline-hidden transition-all text-xs font-medium"
               ></textarea>
             </div>
 
             <button
               type="submit"
-              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-bold rounded-xl transition-all text-xs flex items-center justify-center gap-2 cursor-pointer"
+              disabled={submitting}
+              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 active:scale-[0.98] text-white font-bold rounded-xl transition-all text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-blue-500/20"
             >
-              <span>Submit Leave Request</span>
+              <span>{submitting ? "Submitting Request..." : "Submit Leave Request"}</span>
             </button>
           </form>
         </div>
@@ -2657,25 +2766,46 @@ function Leave({ leaves, onSubmit }) {
             <span>Leave Submission History</span>
           </h3>
 
-          <div className="space-y-4 max-h-[360px] overflow-y-auto pr-1 custom-scrollbar">
-            {leaves.map((l) => (
-              <div key={l.id} className="p-3 bg-slate-50 border border-slate-100 rounded-lg space-y-1">
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-xs text-slate-800">{l.type}</span>
-                  <span className="text-[9px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded font-black uppercase">
-                    {l.status}
-                  </span>
-                </div>
-                <div className="text-[10px] text-slate-400 font-bold">
-                  {l.fromDate} to {l.toDate}
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed truncate font-medium">{l.reason}</p>
-              </div>
-            ))}
-            {leaves.length === 0 && (
-              <p className="text-slate-400 text-xs font-bold text-center py-6">No previous leave requests.</p>
-            )}
-          </div>
+          {loading ? (
+            <div className="p-8 text-center text-slate-400 font-bold text-xs">
+              🔄 Loading leave history...
+            </div>
+          ) : (
+            <div className="space-y-4 max-h-[360px] overflow-y-auto pr-1 custom-scrollbar">
+              {leaveHistory.map((l) => {
+                const isApproved = l.status === "Approved";
+                const isRejected = l.status === "Rejected";
+                const fromStr = l.from_date ? new Date(l.from_date).toISOString().split("T")[0] : l.fromDate;
+                const toStr = l.to_date ? new Date(l.to_date).toISOString().split("T")[0] : l.toDate;
+
+                return (
+                  <div key={l.id} className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="font-black text-xs text-slate-900">{l.leave_type || l.type}</span>
+                      <span
+                        className={`text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-wider ${
+                          isApproved
+                            ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                            : isRejected
+                            ? "bg-rose-100 text-rose-800 border border-rose-200"
+                            : "bg-amber-100 text-amber-800 border border-amber-200"
+                        }`}
+                      >
+                        {l.status}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-mono font-bold">
+                      📅 {fromStr} to {toStr}
+                    </div>
+                    <p className="text-[11px] text-slate-600 leading-relaxed font-medium mt-1">{l.reason}</p>
+                  </div>
+                );
+              })}
+              {leaveHistory.length === 0 && (
+                <p className="text-slate-400 text-xs font-bold text-center py-6">No previous leave requests found.</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -2958,6 +3088,248 @@ function FinalResult() {
           </tfoot>
         </table>
       </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------
+// 17. Student Library Catalog & Loans Component
+// ----------------------------------------------------
+function StudentLibrary() {
+  const [libData, setLibData] = useState({ books: [], loans: [] });
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  useEffect(() => {
+    async function loadLib() {
+      setLoading(true);
+      try {
+        const res = await api.getLibraryBooks();
+        if (res) {
+          setLibData({
+            books: res.books || res.booksData || [],
+            loans: res.loans || res.issueRecords || []
+          });
+        }
+      } catch (err) {
+        console.warn("Student library fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadLib();
+  }, []);
+
+  const filteredBooks = libData.books.filter((b) => {
+    const term = searchTerm.toLowerCase();
+    return (
+      (b.title || "").toLowerCase().includes(term) ||
+      (b.author || "").toLowerCase().includes(term) ||
+      (b.category || "").toLowerCase().includes(term) ||
+      (b.isbn || "").toLowerCase().includes(term)
+    );
+  });
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-6 text-left">
+      <div className="border-b border-slate-100 pb-3 flex justify-between items-center flex-wrap gap-4">
+        <div>
+          <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+            <Icon name="book" className="w-5 h-5 text-blue-600" />
+            <span>Campus Library Catalog &amp; Book Search</span>
+          </h3>
+          <p className="text-xs text-slate-400 font-semibold mt-0.5">
+            Search physical books inventory, check real-time availability, and track your borrowed titles.
+          </p>
+        </div>
+
+        <div className="relative w-full sm:w-72">
+          <input
+            type="text"
+            placeholder="Search catalog by title, author..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-8 pr-4 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:border-blue-500"
+          />
+          <span className="absolute left-2.5 top-2 text-slate-400 text-xs">🔍</span>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="p-8 text-center text-xs font-bold text-slate-400">
+          🔄 Loading live library book inventory...
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {/* Active Borrowed Loans Banner */}
+          {libData.loans.length > 0 && (
+            <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl space-y-3">
+              <h4 className="text-xs font-black text-blue-900 flex items-center gap-1.5">
+                <span>📋</span> Your Active Borrowed Book Loans ({libData.loans.length})
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {libData.loans.map((loan) => (
+                  <div key={loan.id} className="bg-white p-3 rounded-lg border border-blue-200 text-xs space-y-1 shadow-xs">
+                    <div className="font-black text-slate-900">📖 {loan.book_title || loan.book}</div>
+                    <div className="text-[11px] text-slate-500 font-semibold">
+                      Due Date: <span className="font-bold text-slate-800">{loan.due_date ? new Date(loan.due_date).toISOString().split("T")[0] : loan.dueDate}</span>
+                    </div>
+                    <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                      loan.is_overdue || loan.status === "Overdue" ? "bg-rose-100 text-rose-800" : "bg-emerald-100 text-emerald-800"
+                    }`}>
+                      {loan.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Book Catalog Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredBooks.map((b) => {
+              const avail = b.available_copies !== undefined ? b.available_copies : b.copies || 1;
+              const isAvail = avail > 0;
+              return (
+                <div key={b.id || b.title} className="bg-slate-50/70 border border-slate-200 rounded-xl p-4 space-y-2 text-left flex flex-col justify-between hover:bg-white hover:shadow-xs transition-all">
+                  <div>
+                    <div className="flex justify-between items-start gap-2 mb-1">
+                      <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-[10px] font-bold uppercase">
+                        {b.category || "General"}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                        isAvail ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                      }`}>
+                        {isAvail ? `${avail} Available` : "Out of Stock"}
+                      </span>
+                    </div>
+                    <h4 className="font-black text-sm text-slate-900 leading-snug">📖 {b.title}</h4>
+                    <p className="text-xs text-slate-500 font-semibold mt-1">✍️ Author: {b.author}</p>
+                    {b.isbn && <p className="text-[10px] text-slate-400 font-mono mt-0.5">{b.isbn}</p>}
+                  </div>
+                </div>
+              );
+            })}
+            {filteredBooks.length === 0 && (
+              <div className="col-span-full p-8 text-center text-slate-400 font-bold text-xs">
+                No matching library books found.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ----------------------------------------------------
+// 18. Student Transport Pass & Live GPS Telemetry Component
+// ----------------------------------------------------
+function StudentTransport() {
+  const [transData, setTransData] = useState({ routes: [], assignments: [], gps: [] });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadTrans() {
+      setLoading(true);
+      try {
+        const res = await api.getTransportData();
+        if (res) {
+          setTransData({
+            routes: res.routes || res.buses || [],
+            assignments: res.assignments || [],
+            gps: res.gps || []
+          });
+        }
+      } catch (err) {
+        console.warn("Student transport fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadTrans();
+  }, []);
+
+  const route = transData.routes.length > 0 ? transData.routes[0] : null;
+  const gpsBus = transData.gps.length > 0 ? transData.gps[0] : null;
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-6 text-left">
+      <div className="border-b border-slate-100 pb-3">
+        <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+          <Icon name="bus" className="w-5 h-5 text-emerald-600" />
+          <span>Student Transport Pass &amp; Live Bus Locator</span>
+        </h3>
+        <p className="text-xs text-slate-400 font-semibold mt-0.5">
+          View assigned campus bus route, pickup point, driver emergency contact, and real-time GPS tracking.
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="p-8 text-center text-xs font-bold text-slate-400">
+          🔄 Loading live transport pass &amp; GPS telemetry...
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {/* Active Transport Pass Card */}
+          <div className="bg-gradient-to-r from-emerald-600 via-teal-700 to-slate-900 rounded-2xl p-6 text-white shadow-xl space-y-4">
+            <div className="flex justify-between items-center border-b border-white/10 pb-3">
+              <div>
+                <span className="text-[10px] font-black tracking-widest text-emerald-300 uppercase">OFFICIAL TRANSIT PASS</span>
+                <h4 className="text-xl font-black mt-0.5">{route ? route.route_name || route.route : "Route 1 - Warangal Central"}</h4>
+              </div>
+              <span className="px-3 py-1 bg-emerald-400/20 border border-emerald-300/30 text-emerald-200 text-xs font-black rounded-lg uppercase">
+                PASS ACTIVE
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-semibold">
+              <div>
+                <span className="text-slate-300 text-[10px] uppercase font-bold block">Bus Number</span>
+                <span className="text-sm font-black font-mono text-amber-300">{route ? route.bus_number || route.busNo : "TS-09-AD-1234"}</span>
+              </div>
+              <div>
+                <span className="text-slate-300 text-[10px] uppercase font-bold block">Assigned Driver</span>
+                <span className="text-sm font-black">{route ? route.driver_name || route.driver : "G. RAVI"}</span>
+              </div>
+              <div>
+                <span className="text-slate-300 text-[10px] uppercase font-bold block">Emergency Phone</span>
+                <span className="text-sm font-black font-mono">{route?.driver_phone || "+91 9876543210"}</span>
+              </div>
+              <div>
+                <span className="text-slate-300 text-[10px] uppercase font-bold block">Pickup Stop</span>
+                <span className="text-sm font-black text-emerald-300">📍 Subedari Stop</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Live GPS Telemetry Map Widget */}
+          <div className="bg-slate-900 text-white rounded-2xl p-5 border border-slate-800 space-y-4">
+            <div className="flex justify-between items-center">
+              <h4 className="text-sm font-black flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping inline-block" />
+                <span>Live GPS Vehicle Telemetry</span>
+              </h4>
+              <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] font-mono font-bold rounded">
+                SATELLITE SYNC OK
+              </span>
+            </div>
+
+            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2 text-xs">
+              <div className="flex justify-between font-mono text-slate-400">
+                <span>Vehicle: <strong className="text-amber-400">{gpsBus ? gpsBus.bus_number : "TS-09-AD-1234"}</strong></span>
+                <span>Speed: <strong className="text-emerald-400">{gpsBus ? `${gpsBus.speed_kmh} KM/H` : "42 KM/H"}</strong></span>
+              </div>
+              <div className="font-bold text-slate-200">
+                Current Location: <span className="text-blue-400">📍 {gpsBus ? gpsBus.current_location : "En Route - Subedari Stop"}</span>
+              </div>
+              <div className="text-[10px] text-slate-500 font-mono">
+                Coordinates: {gpsBus ? `${gpsBus.lat}° N, ${gpsBus.lng}° E` : "17.9784° N, 79.5941° E"}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
