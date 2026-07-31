@@ -34,7 +34,7 @@ export async function apiRequest(path, options = {}) {
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data.message || "Something went wrong");
+    throw new Error(data.message || "Something went wrong with the server");
   }
 
   return data;
@@ -42,57 +42,82 @@ export async function apiRequest(path, options = {}) {
 
 export const api = {
   login: async (studentId, password) => {
-    try {
-      const data = await apiRequest("/student/login", {
-        method: "POST",
-        body: JSON.stringify({ studentId, password }),
-      });
-      if (data.token && data.student) {
-        setStudentAuth(data.token, data.student);
-      }
-      return data;
-    } catch (err) {
-      console.warn("Backend auth failed, falling back to mock login.", err);
-      // Fallback for mock login
-      const mockStudent = {
-        id: 999,
-        fullName: "Student Name",
-        studentId: studentId || "STU-601",
-        email: "student@xyz.edu",
-        phone: "+91 98765 43210",
-        grade: "Grade 12",
-        program: "Computer Science",
-        semester: "6",
-        section: "A",
-        attendance: 84,
-      };
-      setStudentAuth("mock-token", mockStudent);
-      return { message: "Mock login successful", token: "mock-token", student: mockStudent };
+    const data = await apiRequest("/student/login", {
+      method: "POST",
+      body: JSON.stringify({ studentId, password }),
+    });
+    if (data.token && data.student) {
+      setStudentAuth(data.token, data.student);
     }
+    return data;
   },
 
   register: async (payload) => {
-    try {
-      return await apiRequest("/student/register", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-    } catch (err) {
-      console.warn("Backend registration failed, falling back to mock success.", err);
-      return { message: "Mock registration successful" };
-    }
+    return await apiRequest("/student/register", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   },
 
   getMe: async () => {
     try {
       const data = await apiRequest("/student/me");
       if (data.student) {
-        localStorage.setItem("erp_student", JSON.stringify(data.student));
+        setStudentAuth(getStudentToken(), data.student);
+        return data.student;
       }
-      return data.student;
     } catch (err) {
-      console.warn("Backend getMe failed, returning local storage or mock.", err);
-      return getStoredStudent();
+      console.warn("Backend getMe error:", err);
     }
+    return getStoredStudent();
+  },
+
+  getAttendance: async (studentId) => {
+    try {
+      const stored = getStoredStudent();
+      const id = studentId || stored?.id || stored?.studentId || stored?.student_id || "me";
+      return await apiRequest(`/attendance/student/${id}`);
+    } catch (err) {
+      console.warn("Backend getAttendance error:", err);
+      return null;
+    }
+  },
+
+  getReportCard: async (studentId) => {
+    try {
+      const stored = getStoredStudent();
+      const id = studentId || stored?.id || stored?.studentId;
+      return await apiRequest(`/exams/report-card${id ? `/${id}` : ""}`);
+    } catch (err) {
+      console.warn("Backend getReportCard error:", err);
+      return null;
+    }
+  },
+
+  getExams: async () => {
+    try {
+      return await apiRequest("/exams");
+    } catch (err) {
+      console.warn("Backend getExams error:", err);
+      return [];
+    }
+  },
+
+  getStudentFees: async (studentId) => {
+    try {
+      const stored = getStoredStudent();
+      const id = studentId || stored?.id || "me";
+      return await apiRequest(`/fees/student/${id}`);
+    } catch (err) {
+      console.warn("Backend getStudentFees error:", err);
+      return null;
+    }
+  },
+
+  payStudentFee: async (feeId, payload = {}) => {
+    return await apiRequest(`/fees/pay/${feeId}`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   }
 };
