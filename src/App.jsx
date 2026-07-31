@@ -261,13 +261,6 @@ const holidays = [
   { event: "Winter Break", date: "24 Dec - 02 Jan 2027" },
 ];
 
-const completedCourses = [
-  { code: "U20CSEJ01", name: "Data Structures", category: "Core", credits: "4" },
-  { code: "U20MABT01", name: "Discrete Mathematics", category: "Core", credits: "4" },
-  { code: "U20PYBJ03", name: "Machine Learning", category: "Core", credits: "5" },
-  { code: "U20CSCJ04", name: "Web Development", category: "Lab", credits: "3" },
-];
-
 const timetableData = [
   { time: "09:00", mon: "Data Structures", tue: "Computer Networks", wed: "Algorithms", thu: "Database", fri: "OS" },
   { time: "10:15", mon: "Discrete Math", tue: "OOP", wed: "Networks", thu: "Database", fri: "Algorithms" },
@@ -1535,21 +1528,88 @@ function Attendance({ student, parentRoute, navigateTo }) {
 // ----------------------------------------------------
 // 8. Assignments Screen
 // ----------------------------------------------------
-function Assignments({ assignments, onToggle }) {
+function Assignments() {
+  const [liveAssignments, setLiveAssignments] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("ALL");
 
-  const filtered = assignments.filter((a) => {
+  // Submission Modal State
+  const [activeSubmitModal, setActiveSubmitModal] = useState(null);
+  const [submissionText, setSubmissionText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const loadAssignments = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.getStudentAssignments();
+      if (Array.isArray(data)) {
+        setLiveAssignments(data);
+      }
+    } catch (err) {
+      console.warn("Could not load student assignments:", err);
+    } fontFinally: {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    async function init() {
+      setLoading(true);
+      try {
+        const data = await api.getStudentAssignments();
+        if (Array.isArray(data)) {
+          setLiveAssignments(data);
+        }
+      } catch (err) {
+        console.warn("Could not load student assignments:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    init();
+  }, []);
+
+  const handleOpenSubmitModal = (ass) => {
+    setActiveSubmitModal(ass);
+    setSubmissionText(ass.submission_text || "");
+  };
+
+  const handleSubmitHomework = async (e) => {
+    e.preventDefault();
+    if (!activeSubmitModal) return;
+
+    setSubmitting(true);
+    try {
+      await api.submitAssignment(activeSubmitModal.id, submissionText || "Submitted by student.");
+      setActiveSubmitModal(null);
+      const updated = await api.getStudentAssignments();
+      if (Array.isArray(updated)) setLiveAssignments(updated);
+    } catch (err) {
+      alert(err.message || "Failed to submit assignment");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const filtered = liveAssignments.filter((a) => {
     if (filter === "ALL") return true;
-    return a.status.toUpperCase() === filter.toUpperCase();
+    if (filter === "PENDING") return a.status === "Pending";
+    if (filter === "SUBMITTED") return a.status === "Submitted" || a.status === "Graded";
+    return true;
   });
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-6">
+    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-6 text-left">
       <div className="border-b border-slate-100 pb-3 flex justify-between items-center flex-wrap gap-4">
-        <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
-          <Icon name="document-text" className="w-5 h-5 text-blue-600" />
-          <span>Active Course Projects & Assignments</span>
-        </h3>
+        <div>
+          <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+            <Icon name="document-text" className="w-5 h-5 text-blue-600" />
+            <span>Active Course Projects &amp; Assignments</span>
+          </h3>
+          <p className="text-xs text-slate-400 font-semibold mt-0.5">
+            Submit coursework responses and track faculty grades and comments.
+          </p>
+        </div>
 
         <div className="flex bg-slate-100 p-1 border border-slate-200 rounded-lg text-xs font-bold">
           {["ALL", "PENDING", "SUBMITTED"].map((mode) => (
@@ -1566,60 +1626,181 @@ function Assignments({ assignments, onToggle }) {
         </div>
       </div>
 
-      <div className="overflow-x-auto border border-slate-100 rounded-xl">
-        <table className="w-full text-left border-collapse text-xs">
-          <thead>
-            <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold">
-              <th className="p-4">Subject</th>
-              <th className="p-4">Assignment Topic</th>
-              <th className="p-4">Assigned Date</th>
-              <th className="p-4">Due Date</th>
-              <th className="p-4 text-center">Status</th>
-              <th className="p-4 text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-            {filtered.map((ass, idx) => (
-              <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                <td className="p-4 font-bold text-slate-900">{ass.subject}</td>
-                <td className="p-4 text-slate-500">{ass.project}</td>
-                <td className="p-4 text-slate-400">{ass.assigned}</td>
-                <td className="p-4 text-slate-400">{ass.due}</td>
-                <td className="p-4 text-center">
-                  <span
-                    className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-black uppercase ${
-                      ass.status === "Submitted"
-                        ? "bg-emerald-100 text-emerald-800"
-                        : "bg-amber-100 text-amber-800"
-                    }`}
-                  >
-                    {ass.status}
+      {loading ? (
+        <div className="p-8 text-center text-xs font-bold text-slate-400">
+          🔄 Loading live course assignments from database...
+        </div>
+      ) : (
+        <div className="overflow-x-auto border border-slate-100 rounded-xl">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold">
+                <th className="p-4">Subject</th>
+                <th className="p-4">Assignment Topic</th>
+                <th className="p-4">Assigned / Due</th>
+                <th className="p-4 text-center">Status &amp; Score</th>
+                <th className="p-4 text-right">Submission Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+              {filtered.map((ass) => (
+                <tr key={ass.id} className="hover:bg-slate-50/50 transition-colors">
+                  <td className="p-4 font-bold text-slate-900">
+                    {ass.subject}
+                    <span className="block text-[10px] text-slate-400 font-normal">Faculty: {ass.teacher_name}</span>
+                  </td>
+                  <td className="p-4 font-bold text-slate-800">
+                    {ass.project}
+                    {ass.description && (
+                      <span className="block text-[11px] text-slate-500 font-normal mt-0.5 line-clamp-1">
+                        {ass.description}
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-4 text-slate-500">
+                    <span className="block text-slate-400 text-[10px]">Assigned: {ass.assigned}</span>
+                    <span className="font-bold text-amber-700">Due: {ass.due}</span>
+                  </td>
+                  <td className="p-4 text-center">
+                    <span
+                      className={`inline-block px-3 py-1 rounded-lg text-xs font-black uppercase shadow-xs ${
+                        ass.status === "Graded"
+                          ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                          : ass.status === "Submitted"
+                          ? "bg-blue-100 text-blue-800 border border-blue-200"
+                          : "bg-amber-100 text-amber-800 border border-amber-200"
+                      }`}
+                    >
+                      {ass.status === "Graded" && ass.marks_obtained !== null && ass.marks_obtained !== undefined
+                        ? `GRADED (${ass.marks_obtained}/${ass.max_marks || 100})`
+                        : ass.status}
+                    </span>
+
+                    {ass.status === "Graded" && ass.marks_obtained !== null && ass.marks_obtained !== undefined && (
+                      <span className="block text-xs font-black text-emerald-700 mt-1">
+                        Score: {ass.marks_obtained} / {ass.max_marks || 100}
+                      </span>
+                    )}
+
+                    {ass.teacher_feedback && (
+                      <div className="mt-1.5 p-1.5 bg-emerald-50/80 border border-emerald-100 rounded-lg text-[11px] font-bold text-emerald-800">
+                        💬 Feedback: "{ass.teacher_feedback}"
+                      </div>
+                    )}
+                  </td>
+                  <td className="p-4 text-right">
+                    <button
+                      onClick={() => handleOpenSubmitModal(ass)}
+                      className={`px-3 py-1.5 text-[10px] font-black rounded-lg border transition-all cursor-pointer ${
+                        ass.status === "Graded"
+                          ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                          : ass.status === "Submitted"
+                          ? "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                          : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs"
+                      }`}
+                    >
+                      {ass.status === "Graded" ? "View Grade & Notes" : ass.status === "Submitted" ? "Edit Submission" : "Submit Homework"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="p-8 text-center text-slate-400 font-bold">
+                    No active assignments found in this category.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Submission Popup Modal */}
+      {activeSubmitModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 text-left space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-lg font-black text-slate-900">
+                  {activeSubmitModal.status === "Graded" ? "Graded Coursework Details" : "Submit Homework Response"}
+                </h3>
+                <p className="text-slate-500 text-xs font-semibold mt-0.5">
+                  {activeSubmitModal.project} ({activeSubmitModal.subject})
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveSubmitModal(null)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Graded Summary Banner */}
+            {activeSubmitModal.status === "Graded" && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2 text-xs">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-emerald-800">Faculty Grade Status</span>
+                  <span className="px-2.5 py-0.5 bg-emerald-600 text-white font-black rounded-lg text-xs">
+                    GRADED
                   </span>
-                </td>
-                <td className="p-4 text-right">
-                  <button
-                    onClick={() => onToggle(assignments.indexOf(ass))}
-                    className={`px-3 py-1.5 text-[10px] font-black rounded-lg border transition-all cursor-pointer ${
-                      ass.status === "Submitted"
-                        ? "bg-rose-50 border-rose-100 text-rose-600 hover:bg-rose-100"
-                        : "bg-emerald-50 border-emerald-100 text-emerald-600 hover:bg-emerald-100"
-                    }`}
-                  >
-                    {ass.status === "Submitted" ? "Mark Pending" : "Submit File"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={6} className="p-8 text-center text-slate-400 font-bold">
-                  No assignments found matching this category.
-                </td>
-              </tr>
+                </div>
+                <div className="flex justify-between items-center pt-1 border-t border-emerald-100">
+                  <span className="font-bold text-slate-600">Marks Obtained:</span>
+                  <span className="text-lg font-black text-emerald-900">
+                    {activeSubmitModal.marks_obtained} / {activeSubmitModal.max_marks || 100}
+                  </span>
+                </div>
+                {activeSubmitModal.teacher_feedback && (
+                  <div className="pt-2 border-t border-emerald-100 text-slate-700 font-semibold">
+                    <strong className="text-emerald-800 font-bold block mb-0.5">Faculty Feedback:</strong>
+                    "{activeSubmitModal.teacher_feedback}"
+                  </div>
+                )}
+              </div>
             )}
-          </tbody>
-        </table>
-      </div>
+
+            <form onSubmit={handleSubmitHomework} className="space-y-4 text-xs font-semibold">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Homework Notes / Solution Text</label>
+                <textarea
+                  rows={4}
+                  required
+                  readOnly={activeSubmitModal.status === "Graded"}
+                  placeholder="Paste your source code, solution text, or Google Drive / GitHub link here..."
+                  value={submissionText}
+                  onChange={(e) => setSubmissionText(e.target.value)}
+                  className={`w-full border rounded-xl p-3 text-slate-800 font-medium ${
+                    activeSubmitModal.status === "Graded"
+                      ? "bg-slate-100 border-slate-200 cursor-not-allowed"
+                      : "bg-slate-50 border-slate-200 focus:outline-none focus:border-blue-500"
+                  }`}
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setActiveSubmitModal(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-slate-700 cursor-pointer"
+                >
+                  Close
+                </button>
+                {activeSubmitModal.status !== "Graded" && (
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 font-black text-white shadow-md shadow-blue-500/20 cursor-pointer"
+                  >
+                    {submitting ? "Submitting..." : "Confirm & Submit"}
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2505,13 +2686,33 @@ function Leave({ leaves, onSubmit }) {
 // 14. Course Enrollment & Completed Courses
 // ----------------------------------------------------
 function Enrollment({ navigateTo, page }) {
+  const [coursesList, setCoursesList] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadStudentCourses() {
+      setLoading(true);
+      try {
+        const data = await api.getCourses();
+        if (Array.isArray(data)) {
+          setCoursesList(data);
+        }
+      } catch (err) {
+        console.warn("Could not fetch student courses:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadStudentCourses();
+  }, []);
+
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-6">
       {/* Sub menu selectors */}
       <div className="border-b border-slate-100 pb-3 flex justify-between items-center flex-wrap gap-4">
         <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
           <Icon name="person-add" className="w-5 h-5 text-blue-600" />
-          <span>Active Semester Enrollment</span>
+          <span>Active Semester Enrollment &amp; Course Catalog</span>
         </h3>
 
         <div className="flex bg-slate-100 p-1 border border-slate-200 rounded-lg text-xs font-bold">
@@ -2521,7 +2722,7 @@ function Enrollment({ navigateTo, page }) {
               page === "enroll" ? "bg-white text-blue-600 shadow-xs" : "text-slate-400 hover:text-slate-700"
             }`}
           >
-            Enrollment Settings
+            Enrolled Catalog
           </button>
           <button
             onClick={() => navigateTo("completedCourses")}
@@ -2529,35 +2730,49 @@ function Enrollment({ navigateTo, page }) {
               page === "completed" ? "bg-white text-blue-600 shadow-xs" : "text-slate-400 hover:text-slate-700"
             }`}
           >
-            Completed Courses
+            Completed &amp; Active Courses
           </button>
         </div>
       </div>
 
-      {page === "enroll" ? (
+      {loading ? (
+        <div className="p-8 text-center text-xs font-bold text-slate-400">
+          🔄 Loading database courses catalog...
+        </div>
+      ) : page === "enroll" ? (
         <div className="overflow-x-auto border border-slate-100 rounded-xl">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold">
-                <th className="p-4">Academic Semester</th>
-                <th className="p-4">Timeline Start / End</th>
-                <th className="p-4 text-center">Last Enroll Date</th>
-                <th className="p-4 text-center">Withdraw Cutoff</th>
-                <th className="p-4 text-right">Register Action</th>
+                <th className="p-4">Course Code</th>
+                <th className="p-4">Course Title</th>
+                <th className="p-4">Department</th>
+                <th className="p-4">Faculty Instructor</th>
+                <th className="p-4 text-right">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-              <tr className="hover:bg-slate-50/50 transition-colors">
-                <td className="p-4 font-bold text-slate-900">Semester 6 (Even Term)</td>
-                <td className="p-4 text-slate-500 font-bold">01 Jan - 30 Jun</td>
-                <td className="p-4 text-center text-slate-400">28 Jan 2026</td>
-                <td className="p-4 text-center text-slate-400">27 Jan 2026</td>
-                <td className="p-4 text-right">
-                  <span className="inline-block px-2.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-500 border font-bold">
-                    Enrolled
-                  </span>
-                </td>
-              </tr>
+              {coursesList.length > 0 ? (
+                coursesList.map((c) => (
+                  <tr key={c.id || c.course_code} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="p-4 font-bold text-blue-600 font-mono">{c.course_code || `CRS-${c.id}`}</td>
+                    <td className="p-4 font-bold text-slate-900">{c.course_name || c.title}</td>
+                    <td className="p-4 text-slate-500">{c.department}</td>
+                    <td className="p-4 text-slate-700 font-bold">👤 {c.teacher_name || c.teachers || "Unassigned"}</td>
+                    <td className="p-4 text-right">
+                      <span className="inline-block px-2.5 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">
+                        Enrolled ({c.credits || 3} Credits)
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="p-8 text-center text-slate-400 font-semibold">
+                    No active courses found in database catalog.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -2568,19 +2783,29 @@ function Enrollment({ navigateTo, page }) {
               <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold">
                 <th className="p-4">Course Code</th>
                 <th className="p-4">Name of Course</th>
-                <th className="p-4">Category</th>
+                <th className="p-4">Department</th>
+                <th className="p-4">Assigned Faculty</th>
                 <th className="p-4 text-right">Credits Earned</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-              {completedCourses.map((row) => (
-                <tr key={row.code} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="p-4 font-bold text-blue-600">{row.code}</td>
-                  <td className="p-4 text-slate-800">{row.name}</td>
-                  <td className="p-4 text-slate-400 font-bold">{row.category}</td>
-                  <td className="p-4 text-right text-slate-950 font-black">{row.credits}</td>
+              {coursesList.length > 0 ? (
+                coursesList.map((row) => (
+                  <tr key={row.id || row.course_code} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="p-4 font-bold text-blue-600 font-mono">{row.course_code || `CRS-${row.id}`}</td>
+                    <td className="p-4 text-slate-800 font-bold">{row.course_name || row.title}</td>
+                    <td className="p-4 text-slate-400 font-bold">{row.department}</td>
+                    <td className="p-4 text-slate-700 font-bold">👤 {row.teacher_name || row.teachers || "Unassigned"}</td>
+                    <td className="p-4 text-right text-slate-950 font-black">{row.credits || 3}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="p-8 text-center text-slate-400 font-semibold">
+                    No completed courses found.
+                  </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>

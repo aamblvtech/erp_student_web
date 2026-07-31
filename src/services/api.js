@@ -119,5 +119,32 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     });
+  },
+
+  getCourses: async () => {
+    try {
+      return await apiRequest("/data/courses");
+    } catch (err) {
+      console.warn("Backend getCourses error:", err);
+      return [];
+    }
+  },
+
+  getStudentAssignments: async (studentId) => {
+    try {
+      const stored = getStoredStudent();
+      const id = studentId || stored?.id || "me";
+      return await apiRequest(`/assignments/student/${id}`);
+    } catch (err) {
+      console.warn("Backend getStudentAssignments error:", err);
+      return [];
+    }
+  },
+
+  submitAssignment: async (assignmentId, text) => {
+    return await apiRequest(`/assignments/${assignmentId}/submit`, {
+      method: "POST",
+      body: JSON.stringify({ submission_text: text })
+    });
   }
 };
