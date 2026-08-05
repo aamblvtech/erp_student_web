@@ -308,6 +308,10 @@ export default function App() {
   };
 
   const handleLoginSuccess = (loggedInStudent) => {
+    const token = getStudentToken();
+    if (token) {
+      connectSocket(token);
+    }
     setStudent(loggedInStudent);
     setRoute("home");
   };
@@ -948,9 +952,68 @@ function LoginScreen({ onBack, onRegister, onLoginSuccess }) {
 // ----------------------------------------------------
 function Dashboard({ student, navigateTo, assignments }) {
   const pendingCount = assignments.filter((a) => a.status === "Pending").length;
+  const [liveHolidays, setLiveHolidays] = useState([]);
+  const [liveTimetable, setLiveTimetable] = useState([]);
+  const [ttLoading, setTtLoading] = useState(true);
+
+  const loadHolidaysData = useCallback(async () => {
+    try {
+      const data = await api.getHolidays();
+      setLiveHolidays(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.warn("Could not load live holidays on dashboard:", err);
+    }
+  }, []);
+
+  const loadTimetableData = useCallback(async () => {
+    setTtLoading(true);
+    try {
+      const data = await api.getTimetable();
+      setLiveTimetable(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.warn("Could not load live timetable on dashboard:", err);
+    } finally {
+      setTtLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadHolidaysData();
+    loadTimetableData();
+    onEvent("holidays:created", loadHolidaysData);
+    onEvent("holidays:updated", loadHolidaysData);
+    onEvent("holidays:deleted", loadHolidaysData);
+
+    return () => {
+      offEvent("holidays:created", loadHolidaysData);
+      offEvent("holidays:updated", loadHolidaysData);
+      offEvent("holidays:deleted", loadHolidaysData);
+    };
+  }, [loadHolidaysData, loadTimetableData]);
+
+  const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const currentDayName = daysOfWeek[new Date().getDay()];
+  const todaySchedule = liveTimetable.filter((s) => (s.day_of_week || s.day || "").trim().toLowerCase() === currentDayName.toLowerCase());
+  const displaySchedule = todaySchedule.length > 0 ? todaySchedule : liveTimetable.slice(0, 4);
+
+  const formatDateDisplay = (rawDate) => {
+    if (!rawDate) return "N/A";
+    let str = String(rawDate).split("T")[0];
+    const parts = str.split("-");
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      const d = new Date(year, month, day);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+      }
+    }
+    return str;
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 text-left">
       {/* Banner */}
       <div className="bg-slate-900 rounded-2xl p-6 lg:p-8 text-white relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-6 shadow-lg shadow-slate-900/10 border border-slate-800">
         <div className="absolute -top-10 -left-10 w-40 h-40 bg-blue-600/20 blur-3xl rounded-full"></div>
@@ -976,20 +1039,21 @@ function Dashboard({ student, navigateTo, assignments }) {
       </div>
 
       {/* Quick Action Buttons */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[
           { label: "Attendance Details", key: "attendance", color: "text-blue-600 bg-blue-50 border-blue-100 hover:bg-blue-100", icon: "calendar" },
           { label: "Pending Tasks", key: "assignments", color: "text-emerald-600 bg-emerald-50 border-emerald-100 hover:bg-emerald-100", icon: "document-text" },
           { label: "Exam Schedules", key: "examSchedule", color: "text-violet-600 bg-violet-50 border-violet-100 hover:bg-violet-100", icon: "calendar-number" },
+          { label: "Holidays Calendar", key: "holidays", color: "text-cyan-600 bg-cyan-50 border-cyan-100 hover:bg-cyan-100", icon: "calendar-clear" },
           { label: "Fee Statements", key: "billing", color: "text-amber-600 bg-amber-50 border-amber-100 hover:bg-amber-100", icon: "receipt" },
         ].map((act) => (
           <button
             key={act.key}
             onClick={() => navigateTo(act.key)}
-            className={`flex items-center gap-3 p-4 rounded-xl border font-bold text-sm transition-all text-left shadow-xs cursor-pointer ${act.color}`}
+            className={`flex items-center gap-3 p-4 rounded-xl border font-bold text-xs transition-all text-left shadow-xs cursor-pointer ${act.color}`}
           >
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-white shadow-xs">
-              <Icon name={act.icon} className="w-5 h-5" />
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-white shadow-xs">
+              <Icon name={act.icon} className="w-4 h-4" />
             </div>
             <span>{act.label}</span>
           </button>
@@ -1000,7 +1064,7 @@ function Dashboard({ student, navigateTo, assignments }) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: "Pending Assignments", val: pendingCount, icon: "document-text", tone: "bg-amber-500/10 text-amber-600 border-amber-500/20", key: "assignments" },
-          { label: "Next Mid Exam", val: "28 Feb", icon: "calendar-number", tone: "bg-blue-500/10 text-blue-600 border-blue-500/20", key: "examSchedule" },
+          { label: "Campus Holidays", val: `${liveHolidays.length} Days`, icon: "calendar-clear", tone: "bg-cyan-500/10 text-cyan-600 border-cyan-500/20", key: "holidays" },
           { label: "Outstanding Invoices", val: "₹30,000", icon: "receipt", tone: "bg-rose-500/10 text-rose-600 border-rose-500/20", key: "billing" },
           { label: "Current SGPA", val: "7.18", icon: "bar-chart", tone: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20", key: "finalResult" },
         ].map((card, idx) => (
@@ -1027,10 +1091,15 @@ function Dashboard({ student, navigateTo, assignments }) {
         {/* Today Timetable */}
         <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-5 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-            <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
-              <Icon name="time" className="w-5 h-5 text-blue-600" />
-              <span>Today's Academic Schedule</span>
-            </h3>
+            <div>
+              <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+                <Icon name="time" className="w-5 h-5 text-blue-600" />
+                <span>Today's Academic Schedule</span>
+              </h3>
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mt-0.5">
+                {todaySchedule.length > 0 ? `Showing ${currentDayName} Schedule` : `Upcoming Course Schedule`}
+              </span>
+            </div>
             <button
               onClick={() => navigateTo("timetable")}
               className="text-xs font-black text-blue-600 hover:underline"
@@ -1040,28 +1109,36 @@ function Dashboard({ student, navigateTo, assignments }) {
           </div>
 
           <div className="space-y-4">
-            {[
-              { time: "09:00", name: "Data Structures", room: "Lecture Hall A101", active: true },
-              { time: "10:15", name: "Object Oriented Programming", room: "CSE Computer Lab 2", active: false },
-              { time: "11:30", name: "Programming Laboratory", room: "Digital Systems Center", active: false },
-            ].map((sched, idx) => (
-              <div key={idx} className="flex gap-4 items-start relative">
-                <div className="w-12 pt-1">
-                  <span className="text-xs font-black text-blue-600 block">{sched.time}</span>
+            {ttLoading ? (
+              <div className="p-4 text-center text-xs font-semibold text-slate-400">Loading schedule...</div>
+            ) : displaySchedule.length > 0 ? (
+              displaySchedule.map((sched, idx) => (
+                <div key={sched.id || idx} className="flex gap-4 items-start relative">
+                  <div className="w-20 pt-1">
+                    <span className="text-xs font-black text-blue-600 block leading-tight">{sched.time_slot || sched.slot || sched.time}</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">{sched.day_of_week || sched.day}</span>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <div className={`w-3.5 h-3.5 rounded-full border-2 border-white shadow-xs ${idx === 0 ? "bg-blue-600 ring-4 ring-blue-100" : "bg-slate-300"}`}></div>
+                    {idx < displaySchedule.length - 1 && <div className="w-0.5 h-12 bg-slate-100 mt-1"></div>}
+                  </div>
+                  <div className="flex-1 bg-slate-50 border border-slate-100 rounded-lg p-3 group hover:border-blue-500/30 hover:bg-slate-50/50 transition-all">
+                    <h4 className="font-bold text-slate-800 text-sm leading-tight">{sched.subject}</h4>
+                    <div className="text-slate-400 text-xs mt-1 font-semibold flex items-center justify-between flex-wrap gap-2">
+                      <span className="flex items-center gap-1">
+                        <Icon name="bank" className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{sched.classroom}</span>
+                      </span>
+                      {sched.faculty && <span className="text-blue-700 font-bold">👤 {sched.faculty}</span>}
+                    </div>
+                  </div>
                 </div>
-                <div className="flex flex-col items-center">
-                  <div className={`w-3.5 h-3.5 rounded-full border-2 border-white shadow-xs ${sched.active ? "bg-blue-600 ring-4 ring-blue-100" : "bg-slate-300"}`}></div>
-                  {idx < 2 && <div className="w-0.5 h-12 bg-slate-100 mt-1"></div>}
-                </div>
-                <div className="flex-1 bg-slate-50 border border-slate-100 rounded-lg p-3 group hover:border-blue-500/30 hover:bg-slate-50/50 transition-all">
-                  <h4 className="font-bold text-slate-800 text-sm leading-tight">{sched.name}</h4>
-                  <p className="text-slate-400 text-xs mt-1.5 font-semibold flex items-center gap-1">
-                    <Icon name="bank" className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{sched.room}</span>
-                  </p>
-                </div>
+              ))
+            ) : (
+              <div className="p-6 text-center text-xs font-semibold text-slate-400">
+                No active timetable slots found in database.
               </div>
-            ))}
+            )}
           </div>
         </div>
 
@@ -1100,6 +1177,49 @@ function Dashboard({ student, navigateTo, assignments }) {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Live Campus Holidays Section */}
+      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div>
+            <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+              <Icon name="calendar-clear" className="w-5 h-5 text-blue-600" />
+              <span>Upcoming Campus Holidays</span>
+            </h3>
+            <p className="text-xs text-slate-400 font-semibold mt-0.5">
+              Live synchronized holiday schedule published by teachers & administration.
+            </p>
+          </div>
+          <button
+            onClick={() => navigateTo("holidays")}
+            className="text-xs font-black text-blue-600 hover:underline"
+          >
+            View All ({liveHolidays.length}) →
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {liveHolidays.slice(0, 3).map((h) => (
+            <div key={h.id || h.title} className="bg-slate-50 border border-slate-100 rounded-xl p-4 flex flex-col justify-between space-y-2">
+              <div>
+                <span className="px-2 py-0.5 bg-blue-100 text-blue-800 border border-blue-200 rounded text-[10px] font-black uppercase">
+                  {h.type || "National"}
+                </span>
+                <h4 className="font-bold text-slate-800 text-sm mt-2">{h.title}</h4>
+                <p className="text-xs text-slate-500 font-medium mt-1 line-clamp-2">{h.description || "Official campus closure."}</p>
+              </div>
+              <div className="pt-2 border-t border-slate-200/60 text-xs font-bold text-blue-600">
+                📅 {formatDateDisplay(h.date)}
+              </div>
+            </div>
+          ))}
+          {liveHolidays.length === 0 && (
+            <div className="col-span-full text-center py-6 text-slate-400 font-semibold text-xs">
+              No upcoming campus holidays recorded.
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1312,13 +1432,17 @@ function Attendance({ student, parentRoute, navigateTo }) {
   const logs = liveData?.records?.length
     ? liveData.records.map((r) => {
         let formattedDate = r.date;
-        try {
-          const d = new Date(r.date);
-          if (!isNaN(d.getTime())) {
-            formattedDate = d.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
+        if (r.date && typeof r.date === "string") {
+          const parts = r.date.split("T")[0].split("-");
+          if (parts.length === 3) {
+            const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            const year = parts[0];
+            const monthIdx = parseInt(parts[1], 10) - 1;
+            const day = parseInt(parts[2], 10);
+            if (monthIdx >= 0 && monthIdx < 12) {
+              formattedDate = `${months[monthIdx]} ${day}, ${year}`;
+            }
           }
-        } catch {
-          formattedDate = String(r.date).split("T")[0];
         }
         return {
           date: formattedDate,
@@ -1505,27 +1629,24 @@ function Assignments() {
       }
     } catch (err) {
       console.warn("Could not load student assignments:", err);
-    } fontFinally: {
+    } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    async function init() {
-      setLoading(true);
-      try {
-        const data = await api.getStudentAssignments();
-        if (Array.isArray(data)) {
-          setLiveAssignments(data);
-        }
-      } catch (err) {
-        console.warn("Could not load student assignments:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    init();
-  }, []);
+    loadAssignments();
+
+    onEvent("assignments:created", loadAssignments);
+    onEvent("assignments:updated", loadAssignments);
+    onEvent("assignments:deleted", loadAssignments);
+
+    return () => {
+      offEvent("assignments:created", loadAssignments);
+      offEvent("assignments:updated", loadAssignments);
+      offEvent("assignments:deleted", loadAssignments);
+    };
+  }, [loadAssignments]);
 
   const handleOpenSubmitModal = (ass) => {
     setActiveSubmitModal(ass);
@@ -1770,22 +1891,35 @@ function ExamSchedule({ navigateTo, page }) {
   const [liveExams, setLiveExams] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function loadExams() {
-      setLoading(true);
-      try {
-        const data = await api.getExams();
-        if (Array.isArray(data) && data.length > 0) {
-          setLiveExams(data);
-        }
-      } catch (err) {
-        console.error("Error loading exams in student web:", err);
-      } finally {
-        setLoading(false);
+  const loadExams = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.getExams();
+      if (Array.isArray(data)) {
+        setLiveExams(data);
       }
+    } catch (err) {
+      console.error("Error loading exams in student web:", err);
+    } finally {
+      setLoading(false);
     }
-    loadExams();
   }, []);
+
+  useEffect(() => {
+    loadExams();
+
+    onEvent("exam_created", loadExams);
+    onEvent("exam_deleted", loadExams);
+    onEvent("exams:created", loadExams);
+    onEvent("exams:updated", loadExams);
+
+    return () => {
+      offEvent("exam_created", loadExams);
+      offEvent("exam_deleted", loadExams);
+      offEvent("exams:created", loadExams);
+      offEvent("exams:updated", loadExams);
+    };
+  }, [loadExams]);
 
   const defaultRows = [
     { subject: "Mathematics", code: "CS-201", date: "05-04-2026", time: "09:00 AM - 12:30 PM", syllabus: "Download Syllabus" },
@@ -1795,13 +1929,19 @@ function ExamSchedule({ navigateTo, page }) {
 
   const formatDate = (rawDate) => {
     if (!rawDate) return "Upcoming";
-    try {
-      const d = new Date(rawDate);
-      if (isNaN(d.getTime())) return String(rawDate).split("T")[0];
-      return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-    } catch {
-      return String(rawDate);
+    if (typeof rawDate === "string") {
+      const parts = rawDate.split("T")[0].split("-");
+      if (parts.length === 3) {
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const year = parts[0];
+        const monthIdx = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        if (monthIdx >= 0 && monthIdx < 12) {
+          return `${day < 10 ? "0" + day : day}-${months[monthIdx]}-${year}`;
+        }
+      }
     }
+    return String(rawDate);
   };
 
   const displaySchedules = liveExams.length > 0
@@ -1928,6 +2068,16 @@ function Holidays() {
 
   useEffect(() => {
     loadHolidaysData();
+
+    onEvent("holidays:created", loadHolidaysData);
+    onEvent("holidays:updated", loadHolidaysData);
+    onEvent("holidays:deleted", loadHolidaysData);
+
+    return () => {
+      offEvent("holidays:created", loadHolidaysData);
+      offEvent("holidays:updated", loadHolidaysData);
+      offEvent("holidays:deleted", loadHolidaysData);
+    };
   }, [loadHolidaysData]);
 
   return (
@@ -1967,10 +2117,21 @@ function Holidays() {
             </thead>
             <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
               {liveHolidays.map((h) => {
-                const dateObj = new Date(h.date);
-                const dateStr = !isNaN(dateObj.getTime())
-                  ? dateObj.toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short", year: "numeric" })
-                  : h.date;
+                let dateStr = "N/A";
+                if (h.date) {
+                  const str = String(h.date).split("T")[0];
+                  const parts = str.split("-");
+                  if (parts.length === 3) {
+                    const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                    if (!isNaN(d.getTime())) {
+                      dateStr = d.toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+                    } else {
+                      dateStr = str;
+                    }
+                  } else {
+                    dateStr = String(h.date);
+                  }
+                }
 
                 return (
                   <tr key={h.id || h.title} className="hover:bg-slate-50/50 transition-colors">
@@ -2023,8 +2184,8 @@ function Timetable({ navigateTo, page }) {
     loadTT();
   }, []);
 
-  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-  const slots = [
+  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const defaultSlots = [
     "09:00 AM - 10:00 AM",
     "10:15 AM - 11:15 AM",
     "11:30 AM - 12:30 PM",
@@ -2032,10 +2193,24 @@ function Timetable({ navigateTo, page }) {
     "02:45 PM - 03:45 PM"
   ];
 
+  const normalizeStr = (str) => (str || "").toLowerCase().replace(/\s+/g, "").replace(/^0/, "");
+
+  const fetchedSlots = timetableSlots
+    .map((s) => s.time_slot || s.slot)
+    .filter(Boolean);
+
+  const slots = Array.from(
+    new Set([
+      ...defaultSlots,
+      ...fetchedSlots.filter((fs) => !defaultSlots.some((ds) => normalizeStr(ds) === normalizeStr(fs)))
+    ])
+  );
+
   const getSlotForDay = (timeSlot, dayName) => {
     return timetableSlots.find((s) => {
-      const matchDay = (s.day_of_week || s.day || "").toLowerCase() === dayName.toLowerCase();
-      const matchSlot = (s.time_slot || s.slot || "").toLowerCase() === timeSlot.toLowerCase();
+      const matchDay = (s.day_of_week || s.day || "").toLowerCase().trim() === dayName.toLowerCase().trim();
+      const slotVal = s.time_slot || s.slot || "";
+      const matchSlot = normalizeStr(slotVal) === normalizeStr(timeSlot);
       return matchDay && matchSlot;
     });
   };
@@ -2212,6 +2387,15 @@ function Billing() {
 
   useEffect(() => {
     loadFees();
+    onEvent("fees:created", loadFees);
+    onEvent("fees:updated", loadFees);
+    onEvent("fees:deleted", loadFees);
+
+    return () => {
+      offEvent("fees:created", loadFees);
+      offEvent("fees:updated", loadFees);
+      offEvent("fees:deleted", loadFees);
+    };
   }, []);
 
   const handlePayNowSubmit = async (e) => {
@@ -2639,6 +2823,13 @@ function Leave() {
 
   useEffect(() => {
     loadHistory();
+    onEvent("leaves:updated", loadHistory);
+    onEvent("leaves:created", loadHistory);
+
+    return () => {
+      offEvent("leaves:updated", loadHistory);
+      offEvent("leaves:created", loadHistory);
+    };
   }, [loadHistory]);
 
   const handleApply = async (e) => {
@@ -2951,22 +3142,32 @@ function FinalResult() {
   const [reportCard, setReportCard] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function loadReportCard() {
-      setLoading(true);
-      try {
-        const data = await api.getReportCard();
-        if (data) {
-          setReportCard(data);
-        }
-      } catch (err) {
-        console.error("Report card load error:", err);
-      } finally {
-        setLoading(false);
+  const loadReportCard = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.getReportCard();
+      if (data) {
+        setReportCard(data);
       }
+    } catch (err) {
+      console.error("Report card load error:", err);
+    } finally {
+      setLoading(false);
     }
-    loadReportCard();
   }, []);
+
+  useEffect(() => {
+    loadReportCard();
+    onEvent("mark_updated", loadReportCard);
+    onEvent("mark_deleted", loadReportCard);
+    onEvent("marks_saved", loadReportCard);
+
+    return () => {
+      offEvent("mark_updated", loadReportCard);
+      offEvent("mark_deleted", loadReportCard);
+      offEvent("marks_saved", loadReportCard);
+    };
+  }, [loadReportCard]);
 
   const defaultSubjects = [
     { subject: "Deep Learning Fundamentals", marksObtained: 85, maxMarks: 100, percentage: 85, grade: "A" },
@@ -3100,25 +3301,33 @@ function StudentLibrary() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
-  useEffect(() => {
-    async function loadLib() {
-      setLoading(true);
-      try {
-        const res = await api.getLibraryBooks();
-        if (res) {
-          setLibData({
-            books: res.books || res.booksData || [],
-            loans: res.loans || res.issueRecords || []
-          });
-        }
-      } catch (err) {
-        console.warn("Student library fetch error:", err);
-      } finally {
-        setLoading(false);
+  const loadLib = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.getLibraryBooks();
+      if (res) {
+        setLibData({
+          books: res.books || res.booksData || [],
+          loans: res.loans || res.issueRecords || []
+        });
       }
+    } catch (err) {
+      console.warn("Student library fetch error:", err);
+    } finally {
+      setLoading(false);
     }
-    loadLib();
   }, []);
+
+  useEffect(() => {
+    loadLib();
+    onEvent("library:updated", loadLib);
+    onEvent("books:created", loadLib);
+
+    return () => {
+      offEvent("library:updated", loadLib);
+      offEvent("books:created", loadLib);
+    };
+  }, [loadLib]);
 
   const filteredBooks = libData.books.filter((b) => {
     const term = searchTerm.toLowerCase();
@@ -3228,41 +3437,74 @@ function StudentLibrary() {
 function StudentTransport() {
   const [transData, setTransData] = useState({ routes: [], assignments: [], gps: [] });
   const [loading, setLoading] = useState(true);
+  const [selectedRouteId, setSelectedRouteId] = useState(null);
 
-  useEffect(() => {
-    async function loadTrans() {
-      setLoading(true);
-      try {
-        const res = await api.getTransportData();
-        if (res) {
-          setTransData({
-            routes: res.routes || res.buses || [],
-            assignments: res.assignments || [],
-            gps: res.gps || []
-          });
-        }
-      } catch (err) {
-        console.warn("Student transport fetch error:", err);
-      } finally {
-        setLoading(false);
+  const loadTrans = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.getTransportData();
+      if (res) {
+        setTransData({
+          routes: res.routes || res.buses || [],
+          assignments: res.assignments || [],
+          gps: res.gps || []
+        });
       }
+    } catch (err) {
+      console.warn("Student transport fetch error:", err);
+    } finally {
+      setLoading(false);
     }
-    loadTrans();
   }, []);
 
-  const route = transData.routes.length > 0 ? transData.routes[0] : null;
-  const gpsBus = transData.gps.length > 0 ? transData.gps[0] : null;
+  useEffect(() => {
+    loadTrans();
+    onEvent("transport:updated", loadTrans);
+    onEvent("routes:created", loadTrans);
+
+    return () => {
+      offEvent("transport:updated", loadTrans);
+      offEvent("routes:created", loadTrans);
+    };
+  }, [loadTrans]);
+
+  const activeRoute = selectedRouteId
+    ? transData.routes.find((r) => r.id === selectedRouteId) || transData.routes[0]
+    : transData.routes[0] || null;
+
+  const gpsBus = activeRoute
+    ? transData.gps.find((g) => g.bus_id === activeRoute.id || g.bus_number === activeRoute.bus_number) || transData.gps[0]
+    : transData.gps[0] || null;
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-6 text-left">
-      <div className="border-b border-slate-100 pb-3">
-        <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
-          <Icon name="bus" className="w-5 h-5 text-emerald-600" />
-          <span>Student Transport Pass &amp; Live Bus Locator</span>
-        </h3>
-        <p className="text-xs text-slate-400 font-semibold mt-0.5">
-          View assigned campus bus route, pickup point, driver emergency contact, and real-time GPS tracking.
-        </p>
+      <div className="border-b border-slate-100 pb-3 flex justify-between items-center flex-wrap gap-3">
+        <div>
+          <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+            <Icon name="bus" className="w-5 h-5 text-emerald-600" />
+            <span>Student Transport Pass &amp; Live Bus Locator</span>
+          </h3>
+          <p className="text-xs text-slate-400 font-semibold mt-0.5">
+            View assigned campus bus route, pickup point, driver emergency contact, and real-time GPS tracking.
+          </p>
+        </div>
+
+        {transData.routes.length > 1 && (
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-bold text-slate-500">Select Route:</label>
+            <select
+              value={activeRoute?.id || ""}
+              onChange={(e) => setSelectedRouteId(Number(e.target.value))}
+              className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-500"
+            >
+              {transData.routes.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.route_name || r.route} ({r.bus_number || r.busNo})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -3276,7 +3518,7 @@ function StudentTransport() {
             <div className="flex justify-between items-center border-b border-white/10 pb-3">
               <div>
                 <span className="text-[10px] font-black tracking-widest text-emerald-300 uppercase">OFFICIAL TRANSIT PASS</span>
-                <h4 className="text-xl font-black mt-0.5">{route ? route.route_name || route.route : "Route 1 - Warangal Central"}</h4>
+                <h4 className="text-xl font-black mt-0.5">{activeRoute ? activeRoute.route_name || activeRoute.route : "Route 1 - Warangal Central"}</h4>
               </div>
               <span className="px-3 py-1 bg-emerald-400/20 border border-emerald-300/30 text-emerald-200 text-xs font-black rounded-lg uppercase">
                 PASS ACTIVE
@@ -3286,19 +3528,19 @@ function StudentTransport() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-semibold">
               <div>
                 <span className="text-slate-300 text-[10px] uppercase font-bold block">Bus Number</span>
-                <span className="text-sm font-black font-mono text-amber-300">{route ? route.bus_number || route.busNo : "TS-09-AD-1234"}</span>
+                <span className="text-sm font-black font-mono text-amber-300">{activeRoute ? activeRoute.bus_number || activeRoute.busNo : "TS-09-AD-1234"}</span>
               </div>
               <div>
                 <span className="text-slate-300 text-[10px] uppercase font-bold block">Assigned Driver</span>
-                <span className="text-sm font-black">{route ? route.driver_name || route.driver : "G. RAVI"}</span>
+                <span className="text-sm font-black">{activeRoute ? activeRoute.driver_name || activeRoute.driver : "G. RAVI"}</span>
               </div>
               <div>
                 <span className="text-slate-300 text-[10px] uppercase font-bold block">Emergency Phone</span>
-                <span className="text-sm font-black font-mono">{route?.driver_phone || "+91 9876543210"}</span>
+                <span className="text-sm font-black font-mono">{activeRoute?.driver_phone || "+91 9876543210"}</span>
               </div>
               <div>
                 <span className="text-slate-300 text-[10px] uppercase font-bold block">Pickup Stop</span>
-                <span className="text-sm font-black text-emerald-300">📍 Subedari Stop</span>
+                <span className="text-sm font-black text-emerald-300">📍 {activeRoute?.pickup_points?.split(",")[0] || "Subedari Stop"}</span>
               </div>
             </div>
           </div>

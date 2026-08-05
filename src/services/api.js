@@ -105,7 +105,7 @@ export const api = {
 
   getTimetable: async () => {
     try {
-      const res = await apiRequest("/timetable").catch(() => apiRequest("/data/timetable"));
+      const res = await apiRequest("/timetable");
       return Array.isArray(res) ? res : res?.rows || [];
     } catch (err) {
       console.warn("Backend getTimetable error:", err);
@@ -113,9 +113,27 @@ export const api = {
     }
   },
 
+  getStudentFees: async (studentId) => {
+    try {
+      const stored = getStoredStudent();
+      const id = studentId || stored?.id || stored?.studentId || stored?.student_id || "me";
+      return await apiRequest(`/fees/student/${id}`);
+    } catch (err) {
+      console.warn("Backend getStudentFees error:", err);
+      return null;
+    }
+  },
+
+  payStudentFee: async (feeId, payload) => {
+    return await apiRequest(`/fees/pay/${feeId}`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
   getLibraryBooks: async () => {
     try {
-      const res = await apiRequest("/library").catch(() => apiRequest("/data/library"));
+      const res = await apiRequest("/library");
       return res;
     } catch (err) {
       console.warn("Backend getLibraryBooks error:", err);
@@ -125,7 +143,7 @@ export const api = {
 
   getTransportData: async () => {
     try {
-      const res = await apiRequest("/transport").catch(() => apiRequest("/data/transport"));
+      const res = await apiRequest("/transport");
       return res;
     } catch (err) {
       console.warn("Backend getTransportData error:", err);
@@ -162,8 +180,8 @@ export const api = {
 
   getHolidays: async () => {
     try {
-      const res = await apiRequest("/holidays").catch(() => apiRequest("/data/holidays"));
-      return Array.isArray(res) ? res : [];
+      const res = await apiRequest("/holidays");
+      return Array.isArray(res) ? res : res?.rows || [];
     } catch (err) {
       console.warn("Backend getHolidays error:", err);
       return [];
