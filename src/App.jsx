@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { api, getStoredStudent, getStudentToken, clearStudentAuth } from "./services/api";
-import { connectSocket, onEvent, offEvent } from "./services/realtime";
+import { connectSocket, disconnectSocket, onEvent, offEvent } from "./services/realtime";
 
 // ----------------------------------------------------
 // Icon Component for SVG Paths
@@ -110,6 +110,13 @@ function Icon({ name, className = "w-5 h-5", strokeWidth = "2" }) {
         strokeLinecap="round"
         strokeLinejoin="round"
         d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+      />
+    ),
+    logout: (
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
       />
     ),
     chevronRight: (
@@ -302,6 +309,7 @@ export default function App() {
   }, []);
 
   const handleLogout = () => {
+    disconnectSocket();
     clearStudentAuth();
     setStudent(null);
     setRoute("login");
@@ -365,13 +373,6 @@ export default function App() {
               <strong className="text-white text-xs block font-bold leading-none">{student?.fullName || "Student Name"}</strong>
               <span className="text-slate-400 text-[10px] font-semibold mt-1 block">{student?.program || "CSE"} | Sem {student?.semester || "6"}</span>
             </div>
-            <button
-              onClick={handleLogout}
-              className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-rose-500 transition-colors"
-              title="Logout"
-            >
-              <Icon name="close" className="w-5 h-5" />
-            </button>
           </div>
         </aside>
 
@@ -427,9 +428,10 @@ export default function App() {
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="px-2.5 py-1 text-xs border border-rose-500/30 hover:bg-rose-500/10 text-rose-400 rounded-md transition-all font-semibold"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 rounded-lg text-xs font-bold transition-all cursor-pointer"
                 >
-                  Logout
+                  <Icon name="logout" className="w-4 h-4 text-rose-400" />
+                  <span>Logout</span>
                 </button>
               </div>
             </div>
@@ -453,10 +455,18 @@ export default function App() {
                 <span className="text-blue-600 font-bold">{routeLabels[route] || "Dashboard"}</span>
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <div className="bg-slate-100 text-slate-600 px-3.5 py-1.5 rounded-lg text-xs font-bold">
                 Mon, 27 Jul 2026
               </div>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
+                title="Logout of Student Portal"
+              >
+                <Icon name="logout" className="w-4 h-4 text-rose-600" />
+                <span>Logout</span>
+              </button>
             </div>
           </header>
 
