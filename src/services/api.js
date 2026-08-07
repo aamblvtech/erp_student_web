@@ -226,10 +226,14 @@ export const api = {
     }
   },
 
-  submitAssignment: async (assignmentId, text) => {
+  submitAssignment: async (assignmentId, text, fileUrl = null, fileName = null) => {
     return await apiRequest(`/assignments/${assignmentId}/submit`, {
       method: "POST",
-      body: JSON.stringify({ submission_text: text })
+      body: JSON.stringify({
+        submission_text: text,
+        file_url: fileUrl,
+        file_name: fileName
+      })
     });
   }
 };

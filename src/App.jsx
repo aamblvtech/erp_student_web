@@ -1628,7 +1628,10 @@ function Assignments() {
   // Submission Modal State
   const [activeSubmitModal, setActiveSubmitModal] = useState(null);
   const [submissionText, setSubmissionText] = useState("");
+  const [pdfFileUrl, setPdfFileUrl] = useState(null);
+  const [pdfFileName, setPdfFileName] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [previewPdfModal, setPreviewPdfModal] = useState(null);
 
   const loadAssignments = useCallback(async () => {
     setLoading(true);
@@ -1661,6 +1664,33 @@ function Assignments() {
   const handleOpenSubmitModal = (ass) => {
     setActiveSubmitModal(ass);
     setSubmissionText(ass.submission_text || "");
+    setPdfFileUrl(ass.file_url || null);
+    setPdfFileName(ass.file_name || null);
+  };
+
+  const handlePdfFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      alert("Please upload a valid PDF document (.pdf)");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      alert("File size exceeds 10MB threshold. Please choose a smaller PDF file.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      setPdfFileUrl(evt.target?.result);
+      setPdfFileName(file.name);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemovePdf = () => {
+    setPdfFileUrl(null);
+    setPdfFileName(null);
   };
 
   const handleSubmitHomework = async (e) => {
@@ -1669,7 +1699,12 @@ function Assignments() {
 
     setSubmitting(true);
     try {
-      await api.submitAssignment(activeSubmitModal.id, submissionText || "Submitted by student.");
+      await api.submitAssignment(
+        activeSubmitModal.id,
+        submissionText || "Submitted by student.",
+        pdfFileUrl,
+        pdfFileName
+      );
       setActiveSubmitModal(null);
       const updated = await api.getStudentAssignments();
       if (Array.isArray(updated)) setLiveAssignments(updated);
@@ -1696,7 +1731,7 @@ function Assignments() {
             <span>Active Course Projects &amp; Assignments</span>
           </h3>
           <p className="text-xs text-slate-400 font-semibold mt-0.5">
-            Submit coursework responses and track faculty grades and comments.
+            Submit coursework PDF files, view grade reports, and read faculty feedback.
           </p>
         </div>
 
@@ -1744,6 +1779,17 @@ function Assignments() {
                       <span className="block text-[11px] text-slate-500 font-normal mt-0.5 line-clamp-1">
                         {ass.description}
                       </span>
+                    )}
+                    {ass.file_url && (
+                      <div className="mt-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewPdfModal({ title: ass.project, url: ass.file_url, name: ass.file_name || "Assignment_Submission.pdf" })}
+                          className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded text-[10px] font-bold cursor-pointer transition-colors"
+                        >
+                          📄 Attached PDF ({ass.file_name || "View File"})
+                        </button>
+                      </div>
                     )}
                   </td>
                   <td className="p-4 text-slate-500">
@@ -1851,13 +1897,70 @@ function Assignments() {
             )}
 
             <form onSubmit={handleSubmitHomework} className="space-y-4 text-xs font-semibold">
+              {/* PDF Document Upload Section */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Upload Homework PDF Document</span>
+                  <span className="text-[10px] text-slate-400 font-normal">PDF format (Max 10MB)</span>
+                </label>
+
+                {pdfFileUrl ? (
+                  <div className="p-3 bg-red-50/70 border border-red-200 rounded-xl flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-9 h-9 rounded-lg bg-red-600 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
+                        PDF
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-800 text-xs truncate">
+                          {pdfFileName || "Uploaded_Homework.pdf"}
+                        </p>
+                        <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                          ✓ Attached &amp; Ready
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewPdfModal({ title: activeSubmitModal.project, url: pdfFileUrl, name: pdfFileName || "Homework.pdf" })}
+                        className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg text-[11px] font-bold cursor-pointer transition-colors"
+                      >
+                        👁 View
+                      </button>
+                      {activeSubmitModal.status !== "Graded" && (
+                        <button
+                          type="button"
+                          onClick={handleRemovePdf}
+                          className="px-2 py-1 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-[11px] font-bold cursor-pointer transition-colors"
+                          title="Remove PDF"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <label className="border-2 border-dashed border-slate-200 hover:border-blue-500 rounded-xl p-4 flex flex-col items-center justify-center gap-1 bg-slate-50 hover:bg-blue-50/40 cursor-pointer transition-all text-center">
+                    <span className="text-2xl">📄</span>
+                    <span className="font-bold text-slate-700 text-xs">Click or drag PDF file here to attach</span>
+                    <span className="text-[10px] text-slate-400">Supports official PDF homework submissions</span>
+                    <input
+                      type="file"
+                      accept="application/pdf,.pdf"
+                      disabled={activeSubmitModal.status === "Graded"}
+                      onChange={handlePdfFileChange}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Homework Notes / Solution Text</label>
                 <textarea
-                  rows={4}
-                  required
+                  rows={3}
                   readOnly={activeSubmitModal.status === "Graded"}
-                  placeholder="Paste your source code, solution text, or Google Drive / GitHub link here..."
+                  placeholder="Paste your source code, notes, or Google Drive / GitHub link here..."
                   value={submissionText}
                   onChange={(e) => setSubmissionText(e.target.value)}
                   className={`w-full border rounded-xl p-3 text-slate-800 font-medium ${
@@ -1887,6 +1990,53 @@ function Assignments() {
                 )}
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* PDF Document Previewer Modal */}
+      {previewPdfModal && (
+        <div className="fixed inset-0 bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-4xl w-full h-[85vh] flex flex-col overflow-hidden text-left">
+            <div className="flex justify-between items-center px-6 py-4 border-b border-slate-100 bg-slate-50">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-red-600 text-white font-black text-xs flex items-center justify-center">
+                  PDF
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 leading-tight">
+                    {previewPdfModal.name || "Student_Homework_Submission.pdf"}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">Assignment: {previewPdfModal.title}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewPdfModal.url}
+                  download={previewPdfModal.name || "Homework.pdf"}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-lg shadow-xs transition-colors flex items-center gap-1"
+                >
+                  ⬇ Open / Download
+                </a>
+                <button
+                  onClick={() => setPreviewPdfModal(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 font-bold text-lg cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 bg-slate-100 p-2">
+              <iframe
+                src={previewPdfModal.url}
+                title={previewPdfModal.name || "Homework PDF"}
+                className="w-full h-full rounded-xl border border-slate-200 bg-white"
+              />
+            </div>
           </div>
         </div>
       )}
